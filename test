@@ -1,0 +1,75 @@
+
+from numpy import array
+from numpy.random import rand
+
+from PyQt4.Qt import QImage, QPainter, QBuffer, QIODevice, QByteArray
+from pyqtgraph import GraphicsLayoutWidget
+from pyqtgraph.opengl import GLViewWidget, GLMeshItem
+from pyqtgraph.Qt import QtGui
+%gui qt
+
+verts = array([
+    [0, 0, 0],
+    [2, 0, 0],
+    [1, 2, 0],
+    [1, 1, 1],
+])
+faces = array([
+    [0, 1, 2],
+    [0, 1, 3],
+    [0, 2, 3],
+    [1, 2, 3]
+])
+colors = array([
+    [1, 0, 0, 0.3],
+    [0, 1, 0, 0.3],
+    [0, 0, 1, 0.3],
+    [1, 1, 0, 0.3]
+])
+
+
+class MyFigure():
+
+    def plot_2D(self):
+        self._widget = GraphicsLayoutWidget()
+
+        for i in range(5):
+            self._widget.addPlot().plot(rand(100))
+            self._widget.nextRow()
+
+        self._widget.show()
+        
+    def plot_3D(self):
+        self._widget = GLViewWidget()
+        self._widget.setCameraPosition(distance=10)
+
+        m = GLMeshItem(vertexes=verts, faces=faces, faceColors=colors, smooth=False)
+        self._widget.addItem(m)
+        
+        self._widget.show()
+        
+    def _repr_png_(self):
+
+        self._widget.hide()
+
+        QtGui.QApplication.processEvents()
+        
+        try:
+            self.image = QImage(self._widget.viewRect().size().toSize(),
+                                QImage.Format_RGB32)
+        except AttributeError:
+            self._widget.updateGL()
+            self.image = self._widget.grabFrameBuffer()
+            
+        painter = QPainter(self.image)
+        self._widget.render(painter)
+
+        byte_array = QByteArray()
+        buffer = QBuffer(byte_array)
+        buffer.open(QIODevice.ReadWrite)
+        self.image.save(buffer, 'PNG')
+        buffer.close()        
+
+        return bytes(byte_array)
+
+

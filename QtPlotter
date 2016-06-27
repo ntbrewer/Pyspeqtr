@@ -1,0 +1,503 @@
+    def qtd(self, *args, norm=1, bin_size=1, clear=True):
+        """
+        Plot 1D histogram. 
+        * args: is a list of histograms that may be given as:
+              - positive integer: is interpreted as the histogram id
+                                  from a currently open file
+              - negative integer: is interpreted as the registry number
+                                  (see (show_registers())
+              - Plot object:       see Plot class
+              - string:  in 'x-y' format where x and y are integers 
+                        (note also mandatory quatation marks)
+                        is interpreted as a range of histograms ids
+
+        * norm: may be given as a single float or int value or an 'area' string,
+                also a list of length matching the *args list may be used
+                with any combination of the above accepted values
+        * bin_size: must be an integer, a list of ints is 
+                    also accepted (see norm)
+        * clear: is True by default, which means that previous plot is 
+                 cleared if False is given, the previous plots are not cleared.
+
+        Example:
+        e.d(100, plot1, '105-106', -3, bin_size=[1, 2, 1, 1, 10], clear=False)
+
+        """
+        plots = []
+
+        his_list = self._expand_d_args(args)
+
+        normalization = self._expand_norm(norm, len(his_list))
+        if normalization is None:
+            return None
+
+        bin_sizes = self._expand_bin_sizes(bin_size, len(his_list))
+        if bin_sizes is None:
+            return None
+
+        # Clear the plotting area (of clear is False, the currently
+        # active plots are not deactivated, so they got replotted at
+        # the end of this function)
+        self.QtPlotter.QtClear()
+
+        # Switch mode to 1D
+        self.mode = 1
+        # Deactivate current plots if clear flag is used
+        if clear:
+            for p in Experiment.plots:
+                p.active = False
+
+        # Prepare data for plotting
+        for i_plot, his in enumerate(his_list):
+            if isinstance(his, int):
+                # load histograms from the file
+                if his > 0:
+                    data = self.hisfile.load_histogram(his)
+                    if data[0] != 1:
+                        print('{} is not a 1D histogram'.format(his))
+                        return None
+                    title = self.hisfile.histograms[his]['title'].strip()
+                    title = '{}:{}'.format(his, 
+                                           self._replace_latex_chars(title))
+                    histo = histogram.Histogram()
+                    histo.title = title
+                    histo.x_axis = data[1]
+                    histo.weights = data[3]
+                    histo.errors = self._standard_errors_array(data[3])
+                    plot = Plot(histo, 'histogram', True)
+                    plot.bin_size = bin_sizes[i_plot]
+                    plot.norm = normalization[i_plot]
+                    plots.append(plot)
+                    Experiment.plots.append(plot)
+                else:
+                    # plot histograms from registry
+                    # Numbered by negative numbers (-1 being the latest)
+                    # Call show_registers for a list of available plots
+                    try:
+                        plot = Experiment.plots[his]
+                        Experiment.plots[his].active = True
+                        Experiment.plots[his].bin_size = bin_sizes[i_plot]
+                        Experiment.plots[his].norm = normalization[i_plot]
+                    except IndexError:
+                        print('There is no plot in the registry under the',
+                              'number', his, 'use show_registry() to see',
+                              'available plots')
+                        return None
+                    plots.append(plot)
+            elif isinstance(his, Plot):
+                # If instance of Plot class is given, mark it active and add
+                # to the deque (if not already there)
+                # and to the array to be returned at the end
+                his.active = True
+                his.bin_size = bin_sizes[i_plot]
+                his.norm = normalization[i_plot]
+                plots.append(his)
+                if his not in Experiment.plots:
+                    Experiment.plots.append(his)
+
+        # Count the number of active plots
+        active_plots = 0
+        for plot in Experiment.plots:
+            if plot.active:
+                active_plots += 1
+
+        # Here the actual plotting happens
+        i_plot = 0
+        for plot in Experiment.plots:
+            if plot.active:
+                i_plot += 1
+                # If ylim is not given explicitely, go through the
+                # active plots to find the plot limits
+                # This is run only for the last plot.
+                # Note that this is neccesary as matplotlib is not
+                # autoscaling Y axis when 
+                # changing the X axis is being changed
+                # If, in a future, the behaviour of matplotlib
+                # changes, this part may dropped
+                ylim = None
+                if self.ylim is None and i_plot == active_plots:
+                    ylim = self._auto_scale_y()
+                else:
+                    ylim = self.ylim
+
+                # Note that ylim is autoscaled above if self.ylim is None
+                # But we still keep self.ylim None, 
+                # to indicate autoscaling
+                self.QtPlotter.QtPlot1d(plot, Experiment.xlim, ylim)
+
+        # Return plots that were added or activated
+        return plots
+
+    def qtdd(self, his, xc=None, yc=None, logz=None):
+        """Plot 2D histogram,
+
+        his may be a positive integer (loads histogram from the data file)
+        negative integer (2D plots registry) or Plot instance (must be a 2D
+        plot)
+
+        xc is x range, yc is y range, that may be applied immediately, 
+        see also xc() and yc() functions
+        
+        """
+        self.mode = 2
+
+        for p in Experiment.maps:
+            p.active = False
+
+        plot = None
+        self.QtPlotter.QtClear()
+
+        if isinstance(his, int):
+            if his > 0:
+                data = self.hisfile.load_histogram(his)
+                if data[0] != 2:
+                    print('{} is not a 2D histogram'.format(his))
+                    return None
+
+                title = self.hisfile.histograms[his]['title'].strip()
+                title = '{}:{}'.format(his, 
+                                       self._replace_latex_chars(title))
+                histo = histogram.Histogram(dim=2)
+                histo.title = title
+                histo.x_axis = data[1]
+                histo.y_axis = data[2]
+                histo.weights = data[3]
+                plot = Plot(histo, 'map', True)
+                Experiment.maps.append(plot)
+            else:
+                # plot histogram from the registry
+                # Numbered by negative numbers (-1 being the latest)
+                # Call show_registers for a list of available plots
+                try:
+                    plot = Experiment.maps[his]
+                    Experiment.maps[his].active = True
+                except IndexError:
+                    print('There is no 2D plot in the registry under the',
+                            'number', his, 'use show_registry() to see',
+                            'available plots')
+                    return None
+        elif isinstance(his, Plot):
+            # If instance of Plot class is given, mark it active and add
+            # to the deque (if not already there)
+            # and to the array to be returned at the end
+            if his.histogram.dim != 2:
+                print('This {} is not a 2D histogram'.format(his))
+                return None
+            his.active = True
+            plot = his
+            if his not in Experiment.maps:
+                Experiment.maps.append(his)
+
+        if xc is not None:
+            Experiment.xlim2d = xc
+        if yc is not None:
+            Experiment.ylim2d = yc
+
+        if logz is None:
+            use_log = Experiment.logz
+        else:
+            use_log = logz
+        if plot is not None:
+            self.QtPlotter.QtPlot2d(plot, Experiment.xlim2d, 
+                                Experiment.ylim2d, use_log)
+
+        return [plot]
+
+
+    def qtxc(self, x0=None, x1=None):
+        """Change xrange of a 2D histograms"""
+        if self.mode == 2:
+            if x0 is None or x1 is None:
+                Experiment.xlim2d = None
+                xlim = None
+                for p in Experiment.maps:
+                    if p.active:
+                        histo = p.histogram
+                        xlim = (histo.x_axis[0], histo.x_axis[-1])
+                        break
+            else:
+                Experiment.xlim2d = (x0, x1)
+                xlim = (x0, x1)
+            self.dd(-1, xc=xlim, yc=Experiment.ylim2d)
+
+
+    def qtyc(self, y0=None, y1=None):
+        """Change yrange of a 2D histogram"""
+        if self.mode == 2:
+            if y0 is None or y1 is None:
+                Experiment.ylim2d = None
+                ylim = None
+                for p in Experiment.maps:
+                    if p.active:
+                        histo = p.histogram
+                        ylim = (histo.y_axis[0], histo.y_axis[-1])
+                        break
+            else:
+                Experiment.ylim2d = (y0, y1)
+                ylim = (y0, y1)
+            self.dd(-1, xc=Experiment.xlim2d, yc=ylim)
+
+
+
+    def qtclear(self):
+        self.QtPlotter.QtClear()
+
+
+    def qtcolor_map(self, cmap=None, clist=False):
+        if self.mode == 2:
+            self.QtPlotter.color_map(cmap)
+            self.dd(-1, xc=Experiment.xlim2d, yc=Experiment.ylim2d)
+        if clist:
+            maps=[m for m in cm.datad if not m.endswith("_r")]
+            print(maps)
+               
+    def qtdl(self, x0=None, x1=None):
+        """Change x range of 1D histogram"""
+        if self.mode != 1:
+            return None
+
+        if x0 is None or x1 is None:
+            Experiment.xlim = None
+            self.QtPlotter.QtXlim(self._auto_scale_x())
+        else:
+            Experiment.xlim = (x0, x1)
+            self.QtPlotter.QtXlim(Experiment.xlim)
+
+        if self.ylim is None:
+            self.QtPlotter.QtYlim(self._auto_scale_y())
+
+
+    def qtdmm(self, y0=None, y1=None):
+        """Change yrange of 1D histogram """
+        if self.mode != 1:
+            return None
+
+        if y0 is None or y1 is None:
+            self.ylim = None
+        else:
+            self.ylim = (y0, y1)
+
+        if self.ylim is None:
+            self.QtPlotter.QtYlim(self._auto_scale_y())
+        else:
+            self.QtPlotter.QtYlim(self.ylim)
+
+
+    def qtlog(self):
+        """Change y scale to log or z scale to log"""
+        if self.mode == 1:
+            self.QtPlotter.QtYlog()
+            self.qtdmm()
+        elif self.mode == 2:
+            Experiment.logz = True
+            self.qtdd(-1, xc=Experiment.xlim2d, yc=Experiment.ylim2d)
+
+
+    def qtlin(self):
+        """Change y scale to linear or z scale to linear"""
+        if self.mode == 1:
+            self.QtPlotter.QtYlin()
+        if self.mode == 2:
+            Experiment.logz = False
+            self.qtdd(-1, xc=Experiment.xlim2d, yc=Experiment.ylim2d)
+
+
+
+
+
+#!/usr/bin/env python3
+"""NT Brewer
+brewer.nathant@gmail.com
+Distributed under GNU General Public Licence v3
+
+This module provides simple front-end to pyqtgraph 
+as an alternative to matplotlib for online purposes as well as other tools 
+besides making figures. If you want nice figures, use matplotlib.
+tbd usage for matplotlib is intended to be standard and a flag will direct 
+the usage of this protocal for '--online'.
+
+"""
+
+import math
+import numpy
+import pyqtgraph as pg
+import copy
+
+class QtPlotter:
+    """ This is intended to test new methods for plotting damm histograms 
+        To do:
+        Duplicate methods from pydamm for interpreting histograms of the ORNL format 
+        as well as a few other commands
+        make methods for displaying with pyqtThis class communicates with the matplotlib library
+        and plot the data
+    """
+
+    def __init__(self, size):
+        """Initialize the plot window, size defines the shape and size
+        of the figure.
+        """
+        # Max bins in 2d histogram
+        self.max_2d_bin = 8192
+        # Font size of labels and ticks
+        self.font_size = 20
+        # Set this variable to False if you want to disable the legend
+        self.legend = True
+        # Change this variable to another cmap if you need different colors
+        self.cmap = 0
+        # Some selected color maps, you can toggle with toggle_color_map
+        self.color_maps = 0
+
+        if size == 0:
+            pass
+        if size == 1:
+            figure(1, (8, 6))
+        elif size == 11:
+            figure(1, (12, 8))
+        elif size == 2:
+            figure(1, (8, 6))
+            figure(2, (8, 6))
+        elif size == 12:
+            figure(1, (12, 8))
+            figure(2, (12, 8))
+        else:
+            figure(1, (8, 6))
+
+        if size != 0:
+            tick_params(axis='both', labelsize=self.font_size)
+            grid()
+            ion()
+            show()
+
+    def QtClear(self):
+        """Clear current plotting area"""
+        
+    def QtXlim(self, x_range):
+        """Change X range of a current plot"""
+        
+    def QtYlim(self, y_range):
+        """Change Y range of a current plot"""
+        
+    def QtYlog(self):
+        """Change y scale to log"""
+        
+    def QtYlin(self):
+        """Change y scale to linear"""
+        
+    def QtPlot1d(self, plot, xlim=None, ylim=None):
+        """ Plot 1D histogram
+            The mode defines the way the data are presented,
+            'histogram' is displayed with steps
+            'function' with continuus line
+            'errorbar' with yerrorbars
+
+            The norm (normalization factor) and bin_size are given
+            for the display purposes only. The histogram is not altered.
+
+        """
+        histo = plot.histogram
+
+        if plot.mode == 'histogram':
+            plot
+        elif plot.mode == 'function':
+            plot
+        elif plot.mode == 'errorbar':
+            plot
+        else:
+            raise GeneralError('Unknown plot mode {}'.format(plot.mode))
+
+    def QtPlot2d(self, plot, xc=None, yc=None, logz=False):
+        """Plot 2D histogram 
+        xc is x range, yc is y range 
+        
+        """
+        histo=copy.deepcopy(plot.histogram)
+        if plot.histogram.dim != 2:
+            raise GeneralError('plot2d function needs a 2D histogram!')
+        x = histo.x_axis
+        y = histo.y_axis
+        w = histo.weights
+
+        if xc is not None:
+            x = x[xc[0]:xc[1]]
+            w = w[xc[0]:xc[1],:]
+
+        if yc is not None:
+            y = y[yc[0]:yc[1]]
+            w = w[:, yc[0]:yc[1]]
+
+        initial_nx = len(x)
+        initial_ny = len(y)
+        nx = len(x)
+        ny = len(y)
+
+        binx = 1
+        biny = 1
+        # Rebin data if larger than defined number of bins (max_2d_bin)
+        # This is needed due to the performance of matplotlib with large arrays
+        """ hopefully not needed retained temporarily
+        if nx > self.max_2d_bin:
+            binx = math.ceil(nx / self.max_2d_bin)
+            missing = binx * self.max_2d_bin - nx
+            if missing > 0:
+                addx = numpy.arange(plot.histogram.x_axis[-1] + 1, 
+                                    plot.histogram.x_axis[-1] + missing + 1)
+                x = numpy.concatenate((x, addx))
+                nx = len(x)
+                z = numpy.zeros((missing, ny))
+                w = numpy.concatenate((w, z), axis=0)
+            x = numpy.reshape(x, (-1, binx))
+            x = x.mean(axis=1)
+        if ny > self.max_2d_bin:
+            biny = math.ceil(ny / self.max_2d_bin)
+            missing = biny * self.max_2d_bin - ny
+            if missing > 0:
+                addy = numpy.arange(plot.histogram.y_axis[-1] + 1, 
+                                    plot.histogram.y_axis[-1] + missing + 1)
+                y = numpy.concatenate((y, addy))
+                z = numpy.zeros((nx, missing))
+                w = numpy.concatenate((w, z), axis=1)
+            y = numpy.reshape(y, (-1, biny))
+            y = y.mean(axis=1)
+        
+        nx = len(x)
+        ny = len(y)
+        """
+        if nx != initial_nx or ny != initial_ny:
+            w = numpy.reshape(w, (nx, binx, ny, biny)).mean(3).mean(1)
+        w = numpy.transpose(w)
+
+        title = plot.histogram.title
+        # If logarithmic scale is used, mask values <= 0
+        if logz:
+            w = numpy.ma.masked_where(w <= 0, numpy.log10(w))
+            title += ' (log10)'
+        
+        title(title)
+        pcolormesh(x, y, w, cmap=self.cmap)
+        xlim(xc)
+        ylim(yc)
+        colorbar()
+
+"""
+from pyqtgraph.Qt import QtCore, QtGui
+class CustomViewBox(pg.ViewBox):
+    def __init__(self, *args, **kwds):
+        pg.ViewBox.__init__(self, *args, **kwds)
+        self.setMouseMode(self.RectMode)
+        
+    ## reimplement right-click to zoom out
+    def mouseClickEvent(self, ev):
+        if ev.button() == QtCore.Qt.RightButton:
+            self.autoRange()
+            
+    def mouseDragEvent(self, ev):
+        if ev.button() == QtCore.Qt.RightButton:
+            ev.ignore()
+        else:
+            pg.ViewBox.mouseDragEvent(self, ev)
+
+vb = CustomViewBox()
+
+pw = pg.PlotWidget(viewBox=vb,
+
+:"""
