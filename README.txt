@@ -1,9 +1,12 @@
 ===========
-Pyspectr
+Pyspeqtr
 ===========
+THIS IS IN DEVELOPMENT. DO NOT USE.
 
-Pyspectr provides nuclear spectroscopy tools, specifically targeted
-to use with the his/drr histogram files used by the upak library. Apart from
+Pyspeqtr provides nuclear spectroscopy tools, specifically targeted
+to use with the his/drr histogram files used by the upak library. 
+It is an independent fork of kmiernik's Pyspectr creating an 'online' version 
+that doesn't suffer the lags of matplotlib for large 2d plots. Apart from
 reading the binary input files, it provides some tools like half-life fitting,
 peak-fitting and pydamm program, mimicking the DAMM program from the upak.
 Users are encouraged to use pydamm within ipython3 shell, as it offers a great
@@ -32,7 +35,7 @@ the building and installation procedure (it is very simple). The lmfit library
 on the github includes the standard pythons distutils setup script and is also
 very easy to install.
 
-Ones the required libraries are in place, install the Pyspectr with:
+Ones the required libraries are in place, install the Pyspeqtr with:
     python3 setup.py build
     sudo python3 setup.py install
 
@@ -43,7 +46,7 @@ pydamm
 ------
 Pydamm is a DAMM-like python module, so a typical session starts with importing
 the pydamm module:
->>> from Pyspectr.pydamm import *
+>>> from Pyspeqtr.pydamm import *
 
 The main class for the data analysis is the Experiment, it requires a file
 name (.his) to be given in the constructor:
