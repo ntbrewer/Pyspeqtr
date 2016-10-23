@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 N.T Brewer 2016
-nbrewer2@utk.edu
+brewer.nathant@gmail.com
 Distributed under GNU General Public Licence v3
 
 This module is inteded to be loaded in an interactive interpreter session.
@@ -19,11 +19,11 @@ from collections import deque
 
 from Pyspeqtr import hisfile as hisfile
 from Pyspeqtr import histogram as histogram
-from Pyspeqtr import plotter as plotter
 from Pyspeqtr.exceptions import GeneralError as GeneralError
 from Pyspeqtr.decay_fitter import DecayFitter as DecayFitter
 from Pyspeqtr.peak_fitter import PeakFitter as PeakFitter
-from pyqtgraph import exit
+
+
 """
 from PyQt4.Qt import QImage, QPainter, QBuffer, QIODevice, QByteArray
 from pyqtgraph import GraphicsLayoutWidget
@@ -31,6 +31,7 @@ from pyqtgraph.opengl import GLViewWidget, GLMeshItem
 from pyqtgraph.Qt import QtGui
 %gui qt
 """
+
 class Plot:
     """
     The Plot class holds a set of data and parameters that are needed to
@@ -152,12 +153,29 @@ class Experiment:
     _mode = 1
 
 
-    def __init__(self, file_name, size=11):
+    def __init__(self, file_name, size=11,gui="Online"):
         """Initialize, open data file (his) and open plot window
         (size parameter decides on plot dimensions)
 
         """
+        if gui.lower() == "online" or gui.lower() == "offline":
+            self.gui=gui.lower()
+        else:
+            print("using default: online. options are \"offline\" or \"online\".")
+            self.gui="online"
 
+        if self.gui == "online":
+            from pyqtgraph import exit
+            from IPython import get_ipython
+            from Pyspeqtr import plotter_Qt as plotter
+            ip3 = get_ipython()
+            ip3.magic("gui 'qt'")
+
+        if self.gui == "offline":
+            import matplotlib.pyplot as plt
+            import matplotlib.cm as cm
+            from Pyspeqtr import plotter_mpl as plotter
+            
         self.file_name = file_name
         # The current (active) file
         self.hisfile = None
@@ -168,7 +186,7 @@ class Experiment:
         
         # plotter front-end
         self.plotter = plotter.Plotter(size)
-
+        
 
     def load(self, file_name):
         """Load his file (also tar gzipped files)"""
